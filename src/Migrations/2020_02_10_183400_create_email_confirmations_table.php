@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Schema;
 use Core\Foundation\Database\OpxBlueprint;
 use Core\Foundation\Database\OpxMigration;
 
-class EmailConfirmationsTable extends OpxMigration
+class CreateEmailConfirmationsTable extends OpxMigration
 {
     /**
      * Run the migrations.
