@@ -8,12 +8,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\Access\Authorizable;
 use Illuminate\Notifications\Notifiable;
 use Modules\Opx\Users\Traits\Authenticatable;
-use Modules\Opx\Users\Traits\Authenticate;
 
 class User extends Model implements UserContract
 {
     use Authenticatable,
-        Authenticate,
         Authorizable,
         SoftDeletes,
         Notifiable;
