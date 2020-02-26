@@ -1,25 +1,38 @@
 <?php
 
-namespace Modules\Opx\User\Traits;
+namespace Modules\Opx\Users\Traits;
 
 use Illuminate\Cache\RateLimiter;
-use Illuminate\Http\Request;
 use Modules\Opx\Users\Events\Lockout;
 use Modules\Opx\Users\OpxUsers;
 
 trait ThrottlesLogin
 {
     /**
+     * Get the throttle key for the given credentials.
+     *
+     * @param array $credentials
+     * @param string $ip
+     *
+     * @return  string
+     */
+    protected function throttleKey(array $credentials, string $ip): string
+    {
+        return mb_strtolower($credentials['email'], 'UTF-8') . '|' . $ip;
+    }
+
+    /**
      * Determine if the user has too many failed login attempts.
      *
-     * @param Request $request
+     * @param array $credentials
+     * @param string $ip
      *
      * @return  bool
      */
-    protected function hasTooManyLoginAttempts(Request $request): bool
+    protected function hasTooManyLoginAttempts(array $credentials, string $ip): bool
     {
         return $this->limiter()->tooManyAttempts(
-            $this->throttleKey($request), $this->maxAttempts()
+            $this->throttleKey($credentials, $ip), $this->maxAttempts()
         );
     }
 
@@ -31,18 +44,6 @@ trait ThrottlesLogin
     protected function limiter(): RateLimiter
     {
         return app(RateLimiter::class);
-    }
-
-    /**
-     * Get the throttle key for the given request.
-     *
-     * @param Request $request
-     *
-     * @return  string
-     */
-    protected function throttleKey(Request $request): string
-    {
-        return mb_strtolower($request->input('email'), 'UTF-8') . '|' . $request->ip();
     }
 
     /**
@@ -60,14 +61,15 @@ trait ThrottlesLogin
     /**
      * Increment the login attempts for the user.
      *
-     * @param Request $request
+     * @param array $credentials
+     * @param string $ip
      *
      * @return  void
      */
-    protected function incrementLoginAttempts(Request $request): void
+    protected function incrementLoginAttempts(array $credentials, string $ip): void
     {
         $this->limiter()->hit(
-            $this->throttleKey($request), $this->decayMinutes()
+            $this->throttleKey($credentials, $ip), $this->decayMinutes()
         );
     }
 
@@ -86,38 +88,41 @@ trait ThrottlesLogin
     /**
      * Make throttle seconds.
      *
-     * @param Request $request
+     * @param array $credentials
+     * @param string $ip
      *
      * @return  int
      */
-    protected function lockoutSeconds(Request $request): int
+    protected function lockoutSeconds(array $credentials, string $ip): int
     {
         return $this->limiter()->availableIn(
-            $this->throttleKey($request)
+            $this->throttleKey($credentials, $ip)
         );
     }
 
     /**
      * Clear the login locks for the given user credentials.
      *
-     * @param Request $request
+     * @param array $credentials
+     * @param string $ip
      *
      * @return  void
      */
-    protected function clearLoginAttempts(Request $request): void
+    protected function clearLoginAttempts(array $credentials, string $ip): void
     {
-        $this->limiter()->clear($this->throttleKey($request));
+        $this->limiter()->clear($this->throttleKey($credentials, $ip));
     }
 
     /**
      * Fire an event when a lockout occurs.
      *
-     * @param Request $request
+     * @param array $credentials
+     * @param string $ip
      *
      * @return  void
      */
-    protected function fireLockoutEvent(Request $request): void
+    protected function fireLockoutEvent(array $credentials, string $ip): void
     {
-        event(new Lockout($request));
+        event(new Lockout($credentials, $ip));
     }
 }
