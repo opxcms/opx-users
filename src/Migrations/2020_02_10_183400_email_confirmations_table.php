@@ -17,6 +17,8 @@ class EmailConfirmationsTable extends OpxMigration
 
             $table->parentId('user_id');
 
+            $table->string('email');
+
             $table->string('token');
 
             $table->timestamp('created_at');
