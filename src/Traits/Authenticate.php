@@ -16,7 +16,7 @@ trait Authenticate
      *
      * @return  array
      */
-    protected function credentials(Request $request, array $keys = ['email', 'password', 'password_confirmation']): array
+    protected function credentials(Request $request, array $keys = ['email', 'password']): array
     {
         return $request->only($keys);
     }
@@ -53,7 +53,6 @@ trait Authenticate
         return [
             'email' => 'required|email',
             'password' => 'required|string|min:6',
-            'password_confirmation' => 'same:password',
         ];
     }
 
