@@ -1,0 +1,42 @@
+{
+  "name": "opxcms/opx-users",
+  "description": "OpxCMS users module.",
+  "type": "library",
+  "keywords": [
+    "opxcms",
+    "users",
+    "module"
+  ],
+  "license": "MIT",
+  "support": {
+    "issues": "https://github.com/opxcms/opx-users/issues",
+    "source": "https://github.com/opxcms/opx-users"
+  },
+  "authors": [
+    {
+      "name": "Lozovoy Vyacheslav",
+      "email": "opxcms@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^7.1.3",
+    "ext-json": "*",
+    "opxcms/opx-foundation": "^1.0.1",
+    "opxcms/admin-authorization": "1.0.*",
+    "opxcms/opx-mailtemplater": "1.0.*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^7.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\Opx\\Users\\": "src/"
+    }
+  },
+  "extra": {
+    "opxcms" : {
+      "module": "Modules\\Opx\\Users\\Users"
+    }
+  },
+  "minimum-stability": "dev"
+}
