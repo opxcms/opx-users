@@ -25,7 +25,10 @@ class User extends Model implements UserContract
      */
     public function updateLastLogin(bool $save = true): void
     {
-        $this->setAttribute('last_login', $this->freshTimestamp());
+        $timestamp = $this->freshTimestamp();
+
+        $this->setAttribute('last_login', $timestamp);
+        $this->setAttribute('last_activity', $timestamp);
 
         if ($save) {
             $this->save();
