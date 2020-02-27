@@ -17,6 +17,14 @@ trait Redirects
     {
         $redirect = OpxUsers::config('redirects')[$action] ?? '/';
 
+        if (is_array($redirect)) {
+            if (isset($redirect['route'])) {
+                $redirect = route($redirect['route'], $redirect['parameters'] ?? []);
+            } else {
+                $redirect = '/';
+            }
+        }
+
         return session()->pull('url.intended', $redirect);
     }
 }
