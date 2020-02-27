@@ -101,6 +101,7 @@ class LoginController extends Controller
      * @throws LoginFailureException
      * @throws UserBlockedException
      * @throws UserNotActivatedException
+     * @throws EmailNotConfirmedException
      */
     protected function performLogin(Request $request): void
     {
@@ -133,7 +134,8 @@ class LoginController extends Controller
         $this->checkUserIsBlocked($user, $credentials);
 
         // Check user email verified
-        // TODO check email conditions
+        // throws EmailNotConfirmedException exception on failure
+        $this->checkEmailConfirmed($user, $credentials);
 
         // Check user account activated
         // throws UserNotActivatedException exception on failure
