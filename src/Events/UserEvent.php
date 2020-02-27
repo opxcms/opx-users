@@ -9,6 +9,7 @@ abstract class UserEvent
 {
     use SerializesModels;
 
+    /** @var User */
     public $user;
 
     /**
