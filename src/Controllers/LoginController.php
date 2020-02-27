@@ -9,9 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Modules\Opx\Users\Events\UserActivated;
 use Modules\Opx\Users\Exceptions\BaseUsersException;
+use Modules\Opx\Users\Exceptions\EmailNotConfirmedException;
 use Modules\Opx\Users\Exceptions\UserBlockedException;
 use Modules\Opx\Users\Exceptions\UserNotActivatedException;
 use Modules\Opx\Users\OpxUsers;
+use Modules\Opx\Users\Traits\EmailConfirmation;
 use Modules\Opx\Users\Traits\Redirects;
 use Modules\Opx\Users\Traits\ThrottlesLogin;
 use Modules\Opx\Users\Events\UserAuthenticated;
@@ -26,7 +28,8 @@ class LoginController extends Controller
 {
     use Authenticate,
         ThrottlesLogin,
-        Redirects;
+        Redirects,
+        EmailConfirmation;
 
     protected $codes = [
         'success' => 200,
@@ -229,6 +232,55 @@ class LoginController extends Controller
         if ((bool)$user->getAttribute('is_blocked')) {
             throw new UserBlockedException(
                 trans('opx_users::auth.login_user_is_blocked'),
+                [],
+                $credentials,
+                $this->codes['user_is_blocked']
+            );
+        }
+    }
+
+    /**
+     * Check if user has verified email.
+     *
+     * @param User $user
+     * @param array $credentials
+     *
+     * @return  void
+     *
+     * @throws  EmailNotConfirmedException
+     */
+    protected function checkEmailConfirmed(User $user, array $credentials): void
+    {
+        // if email confirmed, skip all other checks
+        if ((bool)$user->getAttribute('is_email_confirmed')) {
+            return;
+        }
+
+        $settings = OpxUsers::config('login_settings');
+
+        $confirmationSent = false;
+
+        // send confirmation email if it is not confirmed (disabled by default)
+        if ($settings['send_confirmation_email'] ?? false) {
+
+            $token = $this->makeEmailConfirmationToken($user);
+
+            $this->sendEmailConfirmationToken($user, $token);
+
+            $confirmationSent = true;
+        }
+
+        // check if login enabled with not confirmed email (enabled by default)
+        if (!($settings['enable_not_confirmed_email'] ?? true)) {
+
+            $message = trans('opx_users::auth.login_email_not_confirmed');
+
+            if ($confirmationSent) {
+                $message .= ' ' . trans('opx_users::auth.login_email_confirmation_sent');
+            }
+
+            throw new EmailNotConfirmedException(
+                $message,
                 [],
                 $credentials,
                 $this->codes['user_is_blocked']
