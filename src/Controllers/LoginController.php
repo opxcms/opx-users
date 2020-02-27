@@ -7,6 +7,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Modules\Opx\Users\Events\UserActivated;
+use Modules\Opx\Users\Exceptions\BaseUsersException;
+use Modules\Opx\Users\Exceptions\UserBlockedException;
+use Modules\Opx\Users\Exceptions\UserNotActivatedException;
+use Modules\Opx\Users\OpxUsers;
 use Modules\Opx\Users\Traits\Redirects;
 use Modules\Opx\Users\Traits\ThrottlesLogin;
 use Modules\Opx\Users\Events\UserAuthenticated;
@@ -26,8 +31,9 @@ class LoginController extends Controller
     protected $codes = [
         'success' => 200,
         'invalid_credentials' => 400,
-        'login_failure' => 420,
-        'throttle_login' => 421,
+        'login_failure' => 429,
+        'throttle_login' => 429,
+        'user_is_blocked' => 429,
     ];
 
     /**
@@ -42,7 +48,7 @@ class LoginController extends Controller
         try {
             $this->performLogin($request);
 
-        } catch (InvalidCredentialsException|LockoutException|LoginFailureException $exception) {
+        } catch (BaseUsersException $exception) {
 
             return back($exception->getCode())
                 ->withInput($exception->getCredentials())
@@ -68,7 +74,7 @@ class LoginController extends Controller
         try {
             $this->performLogin($request);
 
-        } catch (InvalidCredentialsException|LockoutException|LoginFailureException $exception) {
+        } catch (BaseUsersException $exception) {
 
             return response()->json($exception->toArray(), $exception->getCode());
         }
@@ -76,6 +82,7 @@ class LoginController extends Controller
         return response()->json([
             'message' => trans('opx_users::auth.login_success'),
             'redirect' => $this->redirectTo('after_login'),
+            'token' => csrf_token(),
         ], $this->codes['success']);
     }
 
@@ -89,21 +96,25 @@ class LoginController extends Controller
      * @throws InvalidCredentialsException
      * @throws LockoutException
      * @throws LoginFailureException
+     * @throws UserBlockedException
+     * @throws UserNotActivatedException
      */
     protected function performLogin(Request $request): void
     {
         // Get credentials from request
-        // throws exception on failure
+        // throws InvalidCredentialsException exception on failure
         $credentials = $this->getValidatedCredentials($request);
         $ip = $request->ip();
 
         // Check for maximum login attempts exceeded
-        // throws exception on failure
+        // throws LockoutException exception on failure
         $this->checkForMaxAttempts($credentials, $ip);
 
-        $loggedIn = $this->attemptToLogin($credentials, $request->has('remember'));
+        // Get user attempting to authenticate
+        $user = $this->getAuthenticatingUser($credentials);
 
-        if (!$loggedIn) {
+        if ($user === null) {
+
             $this->incrementLoginAttempts($credentials, $ip);
 
             throw new LoginFailureException(
@@ -113,6 +124,20 @@ class LoginController extends Controller
                 $this->codes['login_failure']
             );
         }
+
+        // Check user account blocked
+        // throws UserBlockedException exception on failure
+        $this->checkUserIsBlocked($user, $credentials);
+
+        // Check user email verified
+        // TODO check email conditions
+
+        // Check user account activated
+        // throws UserNotActivatedException exception on failure
+        $this->checkUserIsActivated($user, $credentials);
+
+        // Finally, log user in using current guard.
+        $this->loginUser($user, $request->has('remember'));
 
         $this->clearLoginAttempts($credentials, $ip);
     }
@@ -172,28 +197,98 @@ class LoginController extends Controller
     }
 
     /**
-     * Attempt lo login user.
+     * Find user trying to authenticate.
      *
      * @param array $credentials
-     * @param bool $remember
      *
-     * @return  bool
+     * @return  User|null
      */
-    protected function attemptToLogin(array $credentials, bool $remember): bool
+    protected function getAuthenticatingUser(array $credentials): ?User
     {
-        $success = Auth::guard('user')->attempt($credentials, $remember);
+        $success = Auth::guard('user')->once($credentials);
 
-        if ($success) {
-
-            /** @var User $user */
-            $user = Auth::guard('user')->user();
-
-            $user->updateLastLogin();
-
-            event(new UserAuthenticated($user));
+        if (!$success) {
+            return null;
         }
 
-        return $success;
+        return Auth::guard('user')->user();
+    }
+
+    /**
+     * Check if user is blocked.
+     *
+     * @param User $user
+     * @param array $credentials
+     *
+     * @return  void
+     *
+     * @throws  UserBlockedException
+     */
+    protected function checkUserIsBlocked(User $user, array $credentials): void
+    {
+        if ((bool)$user->getAttribute('is_blocked')) {
+            throw new UserBlockedException(
+                trans('opx_users::auth.login_user_is_blocked'),
+                [],
+                $credentials,
+                $this->codes['user_is_blocked']
+            );
+        }
+    }
+
+    /**
+     * Check if user is activated.
+     *
+     * @param User $user
+     * @param array $credentials
+     *
+     * @return  void
+     *
+     * @throws  UserNotActivatedException
+     */
+    protected function checkUserIsActivated(User $user, array $credentials): void
+    {
+        // if user's account active, skip all other checks
+        if ((bool)$user->getAttribute('is_activated')) {
+            return;
+        }
+
+        $settings = OpxUsers::config('login_settings');
+
+        // if user account not active and not activated users login disabled (by default)
+        if (!($settings['enable_not_activated'] ?? false)) {
+            throw new UserNotActivatedException(
+                trans('opx_users::auth.login_user_is_blocked'),
+                [],
+                $credentials,
+                $this->codes['user_is_blocked']
+            );
+        }
+
+        // otherwise, check for account activation on a login (by default is true)
+        if ($settings['activate_on_login'] ?? true) {
+            // will be saved later in loginUser() by $user->updateLastLogin()
+            $user->setAttribute('is_activated', true);
+
+            event(new UserActivated($user));
+        }
+    }
+
+    /**
+     * Attempt lo login user.
+     *
+     * @param User $user
+     * @param bool $remember
+     *
+     * @return  void
+     */
+    protected function loginUser(User $user, bool $remember): void
+    {
+        Auth::guard('user')->login($user, $remember);
+
+        $user->updateLastLogin();
+
+        event(new UserAuthenticated($user));
     }
 
     /**
