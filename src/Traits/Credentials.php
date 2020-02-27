@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\MessageBag;
 
-trait Authenticate
+trait Credentials
 {
     /**
      * Get credentials from request.
@@ -70,6 +70,9 @@ trait Authenticate
             'password.string' => trans('opx_users::auth.password_string'),
             'password.min' => trans('opx_users::auth.password_min'),
             'password_confirmation.same' => trans('opx_users::auth.password_confirmation_same'),
+            'token.required' => trans('opx_users::auth.token_required'),
+            'token.string' => trans('opx_users::auth.token_string'),
+            'token.size' => trans('opx_users::auth.token_size'),
         ];
     }
 }

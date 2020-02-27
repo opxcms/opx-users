@@ -21,12 +21,12 @@ use Modules\Opx\Users\Exceptions\InvalidCredentialsException;
 use Modules\Opx\Users\Exceptions\LockoutException;
 use Modules\Opx\Users\Exceptions\LoginFailureException;
 use Modules\Opx\Users\Models\User;
-use Modules\Opx\Users\Traits\Authenticate;
+use Modules\Opx\Users\Traits\Credentials;
 
 
 class LoginController extends Controller
 {
-    use Authenticate,
+    use Credentials,
         ThrottlesLogin,
         Redirects,
         EmailConfirmation;
