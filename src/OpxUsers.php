@@ -12,7 +12,7 @@ use Modules\Opx\Users\Models\User;
  * @method  static string  get($key)
  * @method  static string  path($path = '')
  * @method  static string  trans($key, $parameters = [], $locale = null)
- * @method  static array|string|null  config($key = null)
+ * @method  static mixed|null  config($key = null)
  * @method  static mixed  view($view)
  */
 class OpxUsers extends Facade
