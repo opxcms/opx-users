@@ -1,81 +1,59 @@
 <?php
 
-namespace Modules\Opx\User\Controllers;
+namespace Modules\Opx\Users\Controllers;
 
 use Carbon\Carbon;
 use Core\Http\Controllers\Controller;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 use Modules\Opx\Users\Events\UserEmailChanged;
+use Modules\Opx\Users\Events\UserEmailConfirmed;
 use Modules\Opx\Users\Exceptions\BaseUsersException;
 use Modules\Opx\Users\Exceptions\EmailConfirmationTokenExpiredException;
 use Modules\Opx\Users\Exceptions\EmailConfirmationTokenMismatchException;
 use Modules\Opx\Users\Exceptions\InvalidCredentialsException;
 use Modules\Opx\Users\Models\User;
+use Modules\Opx\Users\OpxUsers;
 use Modules\Opx\Users\Traits\Credentials;
 use Modules\Opx\Users\Traits\Redirects;
+use Modules\Opx\Users\Traits\ResponseCodes;
 
 class EmailConfirmController extends Controller
 {
     use Credentials,
-        Redirects;
-
-    protected $codes = [
-        'success' => 200,
-        'invalid_credentials' => 400,
-        'token_mismatch' => 400,
-        'token_expired' => 400,
-    ];
+        Redirects,
+        ResponseCodes;
 
     /**
      * Handle email confirmation http request.
      *
      * @param Request $request
      *
-     * @return  RedirectResponse
+     * @return  View|RedirectResponse
      */
-    public function confirm(Request $request): RedirectResponse
+    public function confirm(Request $request)
     {
         try {
             $this->performEmailConfirm($request);
 
         } catch (BaseUsersException $exception) {
 
-            return back($exception->getCode())
-                ->withInput($exception->getCredentials())
-                ->withErrors($exception->getErrors())
-                ->with(['message' => $exception->getMessage()]);
+            return OpxUsers::view('message')->with([
+                'error' => true,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+        if (Auth::guard('user')->check()) {
+            return OpxUsers::view('message')->with([
+                'error' => false,
+                'message' => trans('opx_users::auth.email_confirmed')
+            ]);
         }
 
-        return response()->redirectTo(
-            $this->redirectTo('email_confirmed'),
-            $this->codes['success']
-        )->with(['message' => trans('opx_users::auth.email_confirmed')]);
-    }
-
-    /**
-     * Handle email confirmation API request.
-     *
-     * @param Request $request
-     *
-     * @return  JsonResponse
-     */
-    public function confirmApi(Request $request): JsonResponse
-    {
-        try {
-            $this->performEmailConfirm($request);
-
-        } catch (BaseUsersException $exception) {
-
-            return response()->json($exception->toArray(), $exception->getCode());
-        }
-
-        return response()->json([
-            'message' => trans('opx_users::auth.email_confirmed'),
-            'redirect' => $this->redirectTo('email_confirmed'),
-        ], $this->codes['success']);
+        return response()->redirectToRoute('opx_users::login_form')->with(['message' => trans('opx_users::auth.email_confirmed')]);
     }
 
     /**
@@ -91,7 +69,7 @@ class EmailConfirmController extends Controller
      */
     protected function performEmailConfirm(Request $request): void
     {
-        $credentials = $this->getValidatedCredentials($request);
+        $credentials = $this->getValidatedCredentials($request, ['email', 'token']);
 
         // get user assigned
         // throws EmailConfirmationTokenMismatchException or EmailConfirmationTokenExpiredException
@@ -101,7 +79,10 @@ class EmailConfirmController extends Controller
         $currentEmail = $user->getAttribute('email');
 
         // set email confirmed
-        $user->setAttribute('is_email_confirmed', true);
+        if ((bool)$user->getAttribute('is_email_confirmed') === false) {
+            $user->setAttribute('is_email_confirmed', true);
+            event(new UserEmailConfirmed($user));
+        }
 
         // set new email if it changed and fire event
         if ($confirmingEmail !== $currentEmail) {
@@ -111,35 +92,6 @@ class EmailConfirmController extends Controller
 
         // update activity (and save)
         $user->updateLastActivity();
-    }
-
-    /**
-     * Get credentials from request and validate it.
-     *
-     * @param Request $request
-     *
-     * @return  array
-     *
-     * @throws  InvalidCredentialsException
-     */
-    protected function getValidatedCredentials(Request $request): array
-    {
-        // Get credentials from request
-        $credentials = $this->credentials($request, ['email', 'token']);
-
-        // Validate credentials
-        $errors = $this->validateCredentials($credentials);
-
-        if ($errors) {
-            throw new InvalidCredentialsException(
-                trans('opx_users::auth.email_confirm_validation_error'),
-                $errors->messages(),
-                $credentials,
-                $this->codes['invalid_credentials']
-            );
-        }
-
-        return $credentials;
     }
 
     /**
@@ -190,19 +142,4 @@ class EmailConfirmController extends Controller
 
         return $user;
     }
-
-    /**
-     * Credentials validation rules.
-     *
-     * @return  array
-     */
-    protected function validationRules(): array
-    {
-        return [
-            'email' => 'required|email',
-            'token' => 'required|string|size:32',
-        ];
-    }
-
-
 }

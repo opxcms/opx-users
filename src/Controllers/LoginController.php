@@ -9,12 +9,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Modules\Opx\Users\Events\UserActivated;
 use Modules\Opx\Users\Exceptions\BaseUsersException;
+use Modules\Opx\Users\Exceptions\EmailConfirmationTokenThrottledException;
 use Modules\Opx\Users\Exceptions\EmailNotConfirmedException;
+use Modules\Opx\Users\Exceptions\UserAlreadyLoggedInException;
 use Modules\Opx\Users\Exceptions\UserBlockedException;
 use Modules\Opx\Users\Exceptions\UserNotActivatedException;
 use Modules\Opx\Users\OpxUsers;
 use Modules\Opx\Users\Traits\EmailConfirmation;
 use Modules\Opx\Users\Traits\Redirects;
+use Modules\Opx\Users\Traits\ResponseCodes;
 use Modules\Opx\Users\Traits\ThrottlesLogin;
 use Modules\Opx\Users\Events\UserAuthenticated;
 use Modules\Opx\Users\Exceptions\InvalidCredentialsException;
@@ -29,15 +32,8 @@ class LoginController extends Controller
     use Credentials,
         ThrottlesLogin,
         Redirects,
-        EmailConfirmation;
-
-    protected $codes = [
-        'success' => 200,
-        'invalid_credentials' => 400,
-        'login_failure' => 429,
-        'throttle_login' => 429,
-        'user_is_blocked' => 429,
-    ];
+        EmailConfirmation,
+        ResponseCodes;
 
     /**
      * Login user through regular http request.
@@ -102,12 +98,23 @@ class LoginController extends Controller
      * @throws UserBlockedException
      * @throws UserNotActivatedException
      * @throws EmailNotConfirmedException
+     * @throws UserAlreadyLoggedInException
      */
     protected function performLogin(Request $request): void
     {
+        // Check id user already is logged in
+        if (Auth::guard('user')->check()) {
+            throw new UserAlreadyLoggedInException(
+                trans('opx_users::auth.user_already_logged_in'),
+                [],
+                [],
+                $this->codes['already_logged_in']
+            );
+        }
+
         // Get credentials from request
         // throws InvalidCredentialsException exception on failure
-        $credentials = $this->getValidatedCredentials($request);
+        $credentials = $this->getValidatedCredentials($request, ['email', 'password']);
         $ip = $request->ip();
 
         // Check for maximum login attempts exceeded
@@ -148,35 +155,6 @@ class LoginController extends Controller
     }
 
     /**
-     * Get credentials from request and validate it.
-     *
-     * @param Request $request
-     *
-     * @return  array
-     *
-     * @throws  InvalidCredentialsException
-     */
-    protected function getValidatedCredentials(Request $request): array
-    {
-        // Get credentials from request
-        $credentials = $this->credentials($request);
-
-        // Validate credentials
-        $errors = $this->validateCredentials($credentials);
-
-        if ($errors) {
-            throw new InvalidCredentialsException(
-                trans('opx_users::auth.login_validation_error'),
-                $errors->messages(),
-                $credentials,
-                $this->codes['invalid_credentials']
-            );
-        }
-
-        return $credentials;
-    }
-
-    /**
      * Check for max login attempts exceeded.
      *
      * @param array $credentials
@@ -195,6 +173,7 @@ class LoginController extends Controller
             throw new LockoutException(
                 trans('opx_users::auth.login_throttle', ['seconds' => $seconds]),
                 [],
+                $credentials,
                 $this->codes['throttle_login'],
                 $seconds
             );
@@ -265,17 +244,19 @@ class LoginController extends Controller
         // send confirmation email if it is not confirmed (disabled by default)
         if ($settings['send_confirmation_email'] ?? false) {
 
-            $token = $this->makeEmailConfirmationToken($user);
-
-            $this->sendEmailConfirmationToken($user, $token);
-
-            $confirmationSent = true;
+            try {
+                $token = $this->makeEmailConfirmationToken($user);
+                $this->sendEmailConfirmationToken($user, $token);
+                $confirmationSent = true;
+            } catch (EmailConfirmationTokenThrottledException $exception) {
+                $message = $exception->getMessage();
+            }
         }
 
         // check if login enabled with not confirmed email (enabled by default)
         if (!($settings['enable_not_confirmed_email'] ?? true)) {
 
-            $message = trans('opx_users::auth.login_email_not_confirmed');
+            $message = $message ?? trans('opx_users::auth.login_email_not_confirmed');
 
             if ($confirmationSent) {
                 $message .= ' ' . trans('opx_users::auth.login_email_confirmation_sent');
@@ -285,7 +266,7 @@ class LoginController extends Controller
                 $message,
                 [],
                 $credentials,
-                $this->codes['user_is_blocked']
+                $this->codes['email_not_confirmed']
             );
         }
     }
@@ -343,18 +324,5 @@ class LoginController extends Controller
         $user->updateLastLogin();
 
         event(new UserAuthenticated($user));
-    }
-
-    /**
-     * Credentials validation rules.
-     *
-     * @return  array
-     */
-    protected function validationRules(): array
-    {
-        return [
-            'email' => 'required|email',
-            'password' => 'required|string',
-        ];
     }
 }
