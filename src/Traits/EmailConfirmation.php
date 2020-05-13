@@ -5,6 +5,7 @@ namespace Modules\Opx\Users\Traits;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Modules\Opx\Users\Exceptions\EmailConfirmationTokenThrottledException;
 use Modules\Opx\Users\Models\User;
 use Modules\Opx\Users\Notifications\EmailConfirmNotification;
 use Modules\Opx\Users\OpxUsers;
@@ -18,14 +19,29 @@ trait EmailConfirmation
      * @param string|null $email
      *
      * @return  string
+     *
+     * @throws  EmailConfirmationTokenThrottledException
      */
     protected function makeEmailConfirmationToken(User $user, ?string $email = null): string
     {
         $userId = $user->getAttribute('id');
         $email = $email ?? $user->getAttribute('email');
 
-        // Delete all previous entries
-        DB::table('users_email_confirmations')->where('user_id', $userId)->delete();
+        // Check token already exists and throttle token generating.
+        $oldToken = DB::table('users_email_confirmations')->where('user_id', $userId)->first();
+        if ($oldToken !== null) {
+            $releaseTime = Carbon::parse($oldToken->created_at)->addSeconds(OpxUsers::config('token_decay_seconds') ?? 60);
+            $now = Carbon::now();
+            if ($releaseTime > $now) {
+                $seconds = $releaseTime->diffInSeconds($now);
+                throw new EmailConfirmationTokenThrottledException(
+                    trans('opx_users::auth.login_email_confirmation_throttled', ['seconds' => $seconds])
+                );
+            }
+            // Delete all previous entries
+            DB::table('users_email_confirmations')->where('user_id', $userId)->delete();
+        }
+
 
         $token = str_random(32);
 
