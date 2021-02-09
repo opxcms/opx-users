@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Modules\Opx\Users\Exceptions\BaseUsersException;
 use Modules\Opx\Users\Exceptions\InvalidCredentialsException;
 use Modules\Opx\Users\Exceptions\ResetPasswordTokenThrottledException;
@@ -113,7 +114,7 @@ class ForgotController extends Controller
             DB::table('users_password_resets')->where('user_id', $userId)->delete();
         }
 
-        $token = str_random(32);
+        $token = Str::random(32);
 
         $now = new Carbon;
 

@@ -5,6 +5,7 @@ namespace Modules\Opx\Users\Traits;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Modules\Opx\Users\Exceptions\EmailConfirmationTokenThrottledException;
 use Modules\Opx\Users\Models\User;
 use Modules\Opx\Users\Notifications\EmailConfirmNotification;
@@ -43,7 +44,7 @@ trait EmailConfirmation
         }
 
 
-        $token = str_random(32);
+        $token = Str::random(32);
 
         $now = new Carbon;
 

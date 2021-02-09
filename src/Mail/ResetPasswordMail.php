@@ -1,27 +1,25 @@
 <?php
 
-namespace Modules\Opx\User\Mail;
+namespace Modules\Opx\Users\Mail;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Modules\Opx\MailTemplater\OpxMailTemplater;
-use Modules\Opx\User\OpxUser;
-use Modules\Opx\Value\OpxValue;
+use Modules\Opx\Users\OpxUsers;
 
 class ResetPasswordMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    protected $token;
+    protected string $token;
 
     /**
      * Create a new message instance.
      *
-     * @return void
+     * @param string $token
      */
-    public function __construct($token)
+    public function __construct(string $token)
     {
         $this->token = $token;
     }
@@ -33,19 +31,19 @@ class ResetPasswordMail extends Mailable
      */
     public function build(): self
     {
-        $from = OpxUser::config('reset_password_send_from');
-        $subject = OpxUser::trans('reset_password_mail_subject');
+        $from = OpxUsers::config('reset_password_send_from');
+        $subject = OpxUsers::trans('reset_password_mail_subject');
         $link = url("/login/reset?token={$this->token}");
 
         return $this
-            ->from($from, strtolower(OpxValue::get('company_name')))
+            ->from($from)
             ->subject($subject)
             ->html(OpxMailTemplater::make([
-                OpxMailTemplater::title(OpxUser::trans('reset_password_mail_title')),
-                OpxMailTemplater::paragraph(OpxUser::trans('reset_password_mail_intro', ['time' => OpxUser::config('reset_token_ttl')])),
-                OpxMailTemplater::anchor(OpxUser::trans('reset_password_mail_action'), $link, true, 'center bold'),
-                OpxMailTemplater::paragraph(OpxUser::trans('reset_password_mail_outtro')),
-                OpxMailTemplater::paragraph(OpxUser::trans('reset_password_mail_troubles')),
+                OpxMailTemplater::title(OpxUsers::trans('reset_password_mail_title')),
+                OpxMailTemplater::paragraph(OpxUsers::trans('reset_password_mail_intro', ['time' => OpxUsers::config('reset_token_ttl')])),
+                OpxMailTemplater::anchor(OpxUsers::trans('reset_password_mail_action'), $link, true, 'center bold'),
+                OpxMailTemplater::paragraph(OpxUsers::trans('reset_password_mail_outtro')),
+                OpxMailTemplater::paragraph(OpxUsers::trans('reset_password_mail_troubles')),
                 OpxMailTemplater::paragraph($link, 'bold'),
             ]));
     }
